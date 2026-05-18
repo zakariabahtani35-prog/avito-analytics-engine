@@ -132,17 +132,17 @@ Le pipeline est conçu pour alimenter un entrepôt, pas un fichier. Les quatre s
 
 Le scraper est conçu pour être un citoyen responsable du web :
 
-- **Volume configurable** : `SCRAPER_TARGET_LISTINGS=1000` — objectif déclaratif, pas une boucle infinie
+- **Volume configurable** : `SCRAPER_TARGET_LISTINGS=10000` — objectif déclaratif, pas une boucle infinie
 - **Délais polis** entre chaque requête HTTP
 - **Backoff exponentiel** sur `429 Too Many Requests`
 - **Lecture stricte de `robots.txt`** (mode strict activé par défaut)
 - **Arrêt automatique** sur réponses répétées `403` ou `429`
 - **Aucune tentative de contournement** des mécanismes anti-bot
-- **`FETCH_DETAIL_PAGES=false`** par défaut — limitation de l'exposition réseau
+- **`FETCH_DETAIL_PAGES=true`** par défaut — extraction détaillée des attributs quand le site l'autorise
 - **Redaction automatique** des patterns sensibles dans les textes extraits
 - **Zéro PII collectée** : téléphone, email, profil vendeur — jamais collectés
 
-> **Champs collectés uniquement** : titre, prix, ville, quartier, surface, chambres, salles de bain, étage, année de construction, URL, date de scraping.
+> **Champs collectés uniquement** : titre, description, prix, ville, quartier, type de bien, type d'annonce (`sale`/`rent`), surface, chambres, salles de bain, étage, coordonnées si disponibles, attributs publics de l'annonce, année de construction, URL, date de scraping.
 
 ---
 
@@ -160,6 +160,8 @@ Le scraper est conçu pour être un citoyen responsable du web :
 - Normalisation ville et quartier en minuscules stripped
 - Calcul `price_per_m2 = price / surface_m2` uniquement quand les deux sont valides
 - Coercition NULL stricte : aucune valeur inventée — les features optionnelles restent vides si non fiables
+- Séparation explicite `sale` / `rent` ; les locations sont conservées pour l'analyse mais exclues de l'OBT ML de prix de vente
+- Inférence déterministe de `property_type` (`apartment`, `villa`, `studio`, `duplex`, `land`, `office`, `commercial`, etc.) depuis URL, titre, description et attributs
 
 **Validation & Rejet**
 - Rejet des lignes sans titre, prix, localisation, URL, surface, date, `batch_id`
@@ -168,9 +170,9 @@ Le scraper est conçu pour être un citoyen responsable du web :
 
 | Feature | Plage valide |
 |---------|-------------|
-| `surface_m2` | [10 – 2 000] |
-| `chambres` / `salles_de_bain` | [1 – 10] |
-| `etage` | [0 – 50] |
+| `surface_m2` | [10 – 20 000] |
+| `chambres` / `salles_de_bain` | [0 – 20] |
+| `etage` | [0 – 60] |
 | `price_per_m2` | [100 – 100 000] |
 
 **Déduplication**
@@ -258,6 +260,8 @@ Power BI se connecte directement à `bi_schema` : les relations sont préconstru
 - Variables numériques continues : `price`, `surface_m2`, `price_per_m2`
 - Variables discrètes : `chambres`, `salles_de_bain`, `etage`
 - Métadonnée temporelle : `scrape_date`, `batch_id`
+- Features avancées : `log_price`, `rooms_total`, `price_per_room`, `room_density`, `luxury_flag`, `coastal_city`, `district_market_index`, `city_market_index`, `property_age_bucket`, `surface_x_rooms`, `bathrooms_per_bedroom`
+- Contrôle anti-contamination : `ml_property_features` ne contient que les annonces `listing_type = 'sale'`
 
 Aucune transformation supplémentaire n'est requise avant l'entraînement d'un modèle XGBoost ou scikit-learn standard.
 

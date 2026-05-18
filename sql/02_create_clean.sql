@@ -3,9 +3,14 @@ CREATE SCHEMA IF NOT EXISTS clean;
 CREATE TABLE IF NOT EXISTS clean.clean_listings (
     listing_id SERIAL PRIMARY KEY,
     listing_title_clean TEXT NOT NULL,
+    description_clean TEXT,
     price NUMERIC NOT NULL,
     city TEXT NOT NULL,
     district TEXT NOT NULL,
+    property_type TEXT NOT NULL,
+    listing_type TEXT NOT NULL,
+    latitude NUMERIC,
+    longitude NUMERIC,
     listing_url TEXT NOT NULL,
     scraped_at TIMESTAMP NOT NULL,
     batch_id TEXT NOT NULL
@@ -37,15 +42,20 @@ BEGIN
     ) THEN
         ALTER TABLE clean.clean_listings
             ADD CONSTRAINT chk_clean_listings_price_range
-            CHECK (price BETWEEN 10000 AND 50000000) NOT VALID;
+            CHECK (price BETWEEN 300 AND 100000000) NOT VALID;
     END IF;
 END $$;
 
 ALTER TABLE clean.clean_listings
     ADD COLUMN IF NOT EXISTS listing_title_clean TEXT,
+    ADD COLUMN IF NOT EXISTS description_clean TEXT,
     ADD COLUMN IF NOT EXISTS price NUMERIC,
     ADD COLUMN IF NOT EXISTS city TEXT,
     ADD COLUMN IF NOT EXISTS district TEXT,
+    ADD COLUMN IF NOT EXISTS property_type TEXT,
+    ADD COLUMN IF NOT EXISTS listing_type TEXT,
+    ADD COLUMN IF NOT EXISTS latitude NUMERIC,
+    ADD COLUMN IF NOT EXISTS longitude NUMERIC,
     ADD COLUMN IF NOT EXISTS listing_url TEXT,
     ADD COLUMN IF NOT EXISTS scraped_at TIMESTAMP,
     ADD COLUMN IF NOT EXISTS batch_id TEXT;
@@ -79,9 +89,14 @@ BEGIN
                 AND price IS NOT NULL
                 AND NULLIF(BTRIM(city), '') IS NOT NULL
                 AND NULLIF(BTRIM(district), '') IS NOT NULL
+                AND NULLIF(BTRIM(property_type), '') IS NOT NULL
+                AND NULLIF(BTRIM(listing_type), '') IS NOT NULL
+                AND listing_type IN ('sale', 'rent')
                 AND NULLIF(BTRIM(listing_url), '') IS NOT NULL
                 AND scraped_at IS NOT NULL
                 AND NULLIF(BTRIM(batch_id), '') IS NOT NULL
+                AND (latitude IS NULL OR latitude BETWEEN -90 AND 90)
+                AND (longitude IS NULL OR longitude BETWEEN -180 AND 180)
             ) NOT VALID;
     END IF;
 END $$;
@@ -103,7 +118,19 @@ CREATE TABLE IF NOT EXISTS clean.clean_listing_features (
     bedrooms INTEGER,
     bathrooms INTEGER,
     floor INTEGER,
+    construction_year INTEGER,
+    property_age INTEGER,
     price_per_m2 NUMERIC,
+    rooms_total INTEGER,
+    price_per_room NUMERIC,
+    room_density NUMERIC,
+    luxury_flag INTEGER,
+    coastal_city INTEGER,
+    property_age_bucket TEXT,
+    surface_x_rooms NUMERIC,
+    bathrooms_per_bedroom NUMERIC,
+    extraction_score NUMERIC,
+    feature_completeness_score NUMERIC,
     batch_id TEXT
 );
 
@@ -113,12 +140,20 @@ ALTER TABLE clean.clean_listing_features
     ADD COLUMN IF NOT EXISTS bedrooms INTEGER,
     ADD COLUMN IF NOT EXISTS bathrooms INTEGER,
     ADD COLUMN IF NOT EXISTS floor INTEGER,
+    ADD COLUMN IF NOT EXISTS construction_year INTEGER,
+    ADD COLUMN IF NOT EXISTS property_age INTEGER,
     ADD COLUMN IF NOT EXISTS price_per_m2 NUMERIC,
+    ADD COLUMN IF NOT EXISTS rooms_total INTEGER,
+    ADD COLUMN IF NOT EXISTS price_per_room NUMERIC,
+    ADD COLUMN IF NOT EXISTS room_density NUMERIC,
+    ADD COLUMN IF NOT EXISTS luxury_flag INTEGER,
+    ADD COLUMN IF NOT EXISTS coastal_city INTEGER,
+    ADD COLUMN IF NOT EXISTS property_age_bucket TEXT,
+    ADD COLUMN IF NOT EXISTS surface_x_rooms NUMERIC,
+    ADD COLUMN IF NOT EXISTS bathrooms_per_bedroom NUMERIC,
+    ADD COLUMN IF NOT EXISTS extraction_score NUMERIC,
+    ADD COLUMN IF NOT EXISTS feature_completeness_score NUMERIC,
     ADD COLUMN IF NOT EXISTS batch_id TEXT;
-
-ALTER TABLE clean.clean_listing_features
-    DROP COLUMN IF EXISTS construction_year,
-    DROP COLUMN IF EXISTS property_age;
 
 CREATE INDEX IF NOT EXISTS idx_clean_listing_features_batch_id
     ON clean.clean_listing_features (batch_id);
@@ -138,11 +173,22 @@ BEGIN
             ADD CONSTRAINT chk_clean_listing_features_complete_realistic
             CHECK (
                 listing_url IS NOT NULL
-                AND (surface_m2 IS NULL OR surface_m2 BETWEEN 10 AND 2000)
+                AND (surface_m2 IS NULL OR surface_m2 BETWEEN 10 AND 20000)
                 AND (bedrooms IS NULL OR bedrooms BETWEEN 0 AND 20)
                 AND (bathrooms IS NULL OR bathrooms BETWEEN 0 AND 20)
                 AND (floor IS NULL OR floor BETWEEN 0 AND 60)
                 AND (price_per_m2 IS NULL OR price_per_m2 BETWEEN 100 AND 100000)
+                AND (construction_year IS NULL OR construction_year BETWEEN 1800 AND 2100)
+                AND (property_age IS NULL OR property_age BETWEEN 0 AND 200)
+                AND (rooms_total IS NULL OR rooms_total BETWEEN 0 AND 40)
+                AND (price_per_room IS NULL OR price_per_room > 0)
+                AND (room_density IS NULL OR room_density >= 0)
+                AND (luxury_flag IS NULL OR luxury_flag IN (0, 1))
+                AND (coastal_city IS NULL OR coastal_city IN (0, 1))
+                AND (surface_x_rooms IS NULL OR surface_x_rooms >= 0)
+                AND (bathrooms_per_bedroom IS NULL OR bathrooms_per_bedroom >= 0)
+                AND (extraction_score IS NULL OR extraction_score BETWEEN 0 AND 1)
+                AND (feature_completeness_score IS NULL OR feature_completeness_score BETWEEN 0 AND 1)
             ) NOT VALID;
     END IF;
 END $$;

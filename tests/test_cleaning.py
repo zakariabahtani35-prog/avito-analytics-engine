@@ -4,6 +4,8 @@ from contextlib import contextmanager
 from decimal import Decimal
 
 from src.clean.clean_data import (
+    CLEAN_CORE_CSV_COLUMNS,
+    CLEAN_FEATURE_CSV_COLUMNS,
     REQUIRED_CLEAN_COLUMNS,
     _available_feature_columns,
     _build_feature_rows,
@@ -159,6 +161,8 @@ def test_clean_column_profile_keeps_core_fixed_and_removes_optional_from_core() 
                 "price": Decimal("1000000.00"),
                 "city": "Casablanca",
                 "district": "Maarif",
+                "property_type": "apartment",
+                "listing_type": "sale",
                 "listing_url": f"https://www.avito.ma/fr/test/listing_{index}",
                 "scraped_at": "2026-04-28T12:00:00",
                 "batch_id": "batch_test",
@@ -174,7 +178,7 @@ def test_clean_column_profile_keeps_core_fixed_and_removes_optional_from_core() 
 
     profile = build_clean_column_profile(rows)
 
-    assert profile.columns_kept == REQUIRED_CLEAN_COLUMNS
+    assert profile.columns_kept == CLEAN_CORE_CSV_COLUMNS
     assert "surface_m2" in profile.columns_removed
     assert "floor" in profile.columns_removed
     assert "price_per_m2" in profile.columns_removed
@@ -208,7 +212,7 @@ def test_feature_rows_use_fixed_ml_schema() -> None:
     feature_columns = _available_feature_columns(rows)
     feature_rows = _build_feature_rows(rows, feature_columns)
 
-    assert feature_columns == ["surface_m2", "bedrooms", "bathrooms", "floor", "price_per_m2"]
+    assert feature_columns == [column for column in CLEAN_FEATURE_CSV_COLUMNS if column != "listing_url"]
     assert len(feature_rows) == 2
     assert feature_rows[0]["bedrooms"] == 2
     assert feature_rows[1]["bathrooms"] is None
@@ -250,17 +254,10 @@ def test_clean_raw_csv_to_clean_csv_writes_core_and_features_outputs(tmp_path, m
     assert result.clean_file.name == "avito_clean_core_batch_test.csv"
     assert result.features_file.name == "avito_clean_features_batch_test.csv"
     with result.clean_file.open("r", encoding="utf-8", newline="") as file:
-        assert csv.DictReader(file).fieldnames == REQUIRED_CLEAN_COLUMNS
+        assert csv.DictReader(file).fieldnames == CLEAN_CORE_CSV_COLUMNS
     with result.features_file.open("r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
-        assert reader.fieldnames == [
-            "listing_url",
-            "surface_m2",
-            "bedrooms",
-            "bathrooms",
-            "floor",
-            "price_per_m2",
-        ]
+        assert reader.fieldnames == CLEAN_FEATURE_CSV_COLUMNS
         feature_rows = list(reader)
     assert feature_rows[0]["surface_m2"] == "100.00"
     assert feature_rows[0]["floor"] == ""

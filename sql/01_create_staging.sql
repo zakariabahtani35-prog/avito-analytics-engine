@@ -3,18 +3,25 @@ CREATE SCHEMA IF NOT EXISTS staging;
 CREATE TABLE IF NOT EXISTS staging.raw_listings (
     id SERIAL PRIMARY KEY,
     listing_title_raw TEXT,
+    description_raw TEXT,
     price_raw TEXT,
     city_raw TEXT,
     district_raw TEXT,
+    property_type_raw TEXT,
+    listing_type_raw TEXT,
     surface_raw TEXT,
     bedrooms_raw TEXT,
     bathrooms_raw TEXT,
     floor_raw TEXT,
+    latitude_raw TEXT,
+    longitude_raw TEXT,
     construction_year_raw TEXT,
+    attributes_raw TEXT,
     listing_url TEXT,
     scraped_at TIMESTAMP,
     batch_id TEXT,
-    source TEXT
+    source TEXT,
+    detail_scraped BOOLEAN DEFAULT FALSE
 );
 
 DO $$
@@ -112,18 +119,25 @@ END $$;
 
 ALTER TABLE staging.raw_listings
     ADD COLUMN IF NOT EXISTS listing_title_raw TEXT,
+    ADD COLUMN IF NOT EXISTS description_raw TEXT,
     ADD COLUMN IF NOT EXISTS price_raw TEXT,
     ADD COLUMN IF NOT EXISTS city_raw TEXT,
     ADD COLUMN IF NOT EXISTS district_raw TEXT,
+    ADD COLUMN IF NOT EXISTS property_type_raw TEXT,
+    ADD COLUMN IF NOT EXISTS listing_type_raw TEXT,
     ADD COLUMN IF NOT EXISTS surface_raw TEXT,
     ADD COLUMN IF NOT EXISTS bedrooms_raw TEXT,
     ADD COLUMN IF NOT EXISTS bathrooms_raw TEXT,
     ADD COLUMN IF NOT EXISTS floor_raw TEXT,
+    ADD COLUMN IF NOT EXISTS latitude_raw TEXT,
+    ADD COLUMN IF NOT EXISTS longitude_raw TEXT,
     ADD COLUMN IF NOT EXISTS construction_year_raw TEXT,
+    ADD COLUMN IF NOT EXISTS attributes_raw TEXT,
     ADD COLUMN IF NOT EXISTS listing_url TEXT,
     ADD COLUMN IF NOT EXISTS scraped_at TIMESTAMP,
     ADD COLUMN IF NOT EXISTS batch_id TEXT,
-    ADD COLUMN IF NOT EXISTS source TEXT;
+    ADD COLUMN IF NOT EXISTS source TEXT,
+    ADD COLUMN IF NOT EXISTS detail_scraped BOOLEAN DEFAULT FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_raw_listings_listing_url
     ON staging.raw_listings (listing_url);

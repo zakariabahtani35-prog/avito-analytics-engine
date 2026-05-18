@@ -66,6 +66,32 @@ YEAR_RE = re.compile(
     r"\b(?:construction|construit|année|annee)\D{0,20}(18\d{2}|19\d{2}|20\d{2})\b",
     re.IGNORECASE,
 )
+RENT_KEYWORD_RE = re.compile(
+    r"\b(?:location|louer|à\s+louer|a\s+louer|loyer|par\s+mois|/mois|"
+    r"mensuel|jour|journée|journee|nuit|nuitée|nuitee|vacances?|estival)\b",
+    re.IGNORECASE,
+)
+SALE_KEYWORD_RE = re.compile(
+    r"\b(?:vente|vendre|à\s+vendre|a\s+vendre|vend|titre\s+foncier)\b",
+    re.IGNORECASE,
+)
+ANTI_BLOCK_RE = re.compile(
+    r"\b(?:captcha|robot|access denied|too many requests|cloudflare|unusual traffic)\b",
+    re.IGNORECASE,
+)
+LATITUDE_KEYS = {"latitude", "lat"}
+LONGITUDE_KEYS = {"longitude", "lng", "lon"}
+PROPERTY_TYPE_ALIASES: list[tuple[str, re.Pattern[str]]] = [
+    ("apartment", re.compile(r"\b(?:appartement|appartements|apt)\b", re.IGNORECASE)),
+    ("studio", re.compile(r"\bstudio\b", re.IGNORECASE)),
+    ("villa", re.compile(r"\b(?:villa|villas)\b", re.IGNORECASE)),
+    ("riad", re.compile(r"\b(?:riad|riads)\b", re.IGNORECASE)),
+    ("duplex", re.compile(r"\bduplex\b", re.IGNORECASE)),
+    ("house", re.compile(r"\b(?:maison|maisons)\b", re.IGNORECASE)),
+    ("land", re.compile(r"\b(?:terrain|terrains|ferme|fermes)\b", re.IGNORECASE)),
+    ("office", re.compile(r"\b(?:bureau|bureaux|plateau\s+bureau)\b", re.IGNORECASE)),
+    ("commercial", re.compile(r"\b(?:local|locaux|magasin|commerce)\b", re.IGNORECASE)),
+]
 LOCATION_RE = re.compile(
     r"\b(?:appartements?|villas?\s+et\s+riads?|terrains?\s+et\s+fermes?|"
     r"locaux?|local|bureaux?|maisons?)\s+dans\s+"
@@ -212,6 +238,11 @@ class AvitoScraper:
 
             empty_pages = 0
             for record in page_records:
+                if len(records_by_url) >= self.settings.scraper_target_listings:
+                    break
+                candidate_url = normalize_listing_url(record.get("listing_url"))
+                if candidate_url and candidate_url in records_by_url:
+                    continue
                 if self.settings.fetch_detail_pages and record.get("listing_url"):
                     self._enrich_from_detail_page(record)
                 safe_record = sanitize_raw_listing_record(record)
@@ -360,6 +391,19 @@ class AvitoScraper:
                 return None
 
             response.raise_for_status()
+            if ANTI_BLOCK_RE.search(response.text[:4000]):
+                self.blocked_responses += 1
+                log_event(
+                    self.logger,
+                    logging.WARNING,
+                    "scraping_blocked_body_detected",
+                    page=page,
+                    blocked_responses=self.blocked_responses,
+                )
+                if self.blocked_responses >= self.settings.scraper_max_blocked_responses:
+                    raise ScrapingStopped("Stopped safely after repeated anti-bot responses")
+                self._backoff(attempt, status_code=429)
+                continue
             return FetchResult(html=response.text, status_code=response.status_code)
 
         return None
@@ -402,16 +446,28 @@ class AvitoScraper:
 
                 offers = item.get("offers") if isinstance(item.get("offers"), dict) else {}
                 url_city, url_district = self._location_from_url(listing_url)
+                description = sanitize_text(item.get("description"))
+                title = sanitize_text(item.get("name"))
+                combined_text = " ".join(
+                    part for part in [title, description, listing_url] if part
+                )
+                latitude, longitude = extract_latitude_longitude(item)
                 records.append(
                     {
-                        "listing_title_raw": sanitize_text(item.get("name")),
+                        "listing_title_raw": title,
+                        "description_raw": description,
                         "price_raw": sanitize_text(offers.get("price") or item.get("price")),
                         "city_raw": url_city,
                         "district_raw": url_district,
+                        "property_type_raw": infer_property_type(combined_text, listing_url),
+                        "listing_type_raw": detect_listing_type(combined_text, listing_url),
+                        "latitude_raw": latitude,
+                        "longitude_raw": longitude,
                         "listing_url": listing_url,
                         "scraped_at": scraped_at,
                         "batch_id": batch_id,
                         "source": "avito.ma",
+                        "detail_scraped": False,
                     }
                 )
         return records
@@ -443,21 +499,29 @@ class AvitoScraper:
             title = self._extract_title(card, anchor)
             city_raw, district_raw = self._extract_location(card, text)
             url_city, url_district = self._location_from_url(listing_url)
+            property_text = " ".join(part for part in [title, text, listing_url] if part)
 
             record = {
                 "listing_title_raw": title,
+                "description_raw": self._extract_description(card, text),
                 "price_raw": self._extract_price_text(card, text),
                 "city_raw": city_raw or url_city,
                 "district_raw": district_raw or url_district,
+                "property_type_raw": infer_property_type(property_text, listing_url),
+                "listing_type_raw": detect_listing_type(property_text, listing_url),
                 "surface_raw": self._extract_surface_text(card, text),
                 "bedrooms_raw": self._extract_bedrooms_text(card, text),
                 "bathrooms_raw": self._extract_bathrooms_text(card, text),
                 "floor_raw": self._extract_floor_text(card, text),
+                "latitude_raw": None,
+                "longitude_raw": None,
                 "construction_year_raw": self._extract_construction_year_text(card, text),
+                "attributes_raw": encode_attributes(self._extract_attribute_texts(card)),
                 "listing_url": listing_url,
                 "scraped_at": scraped_at,
                 "batch_id": batch_id,
                 "source": "avito.ma",
+                "detail_scraped": False,
             }
             records.append(sanitize_raw_listing_record(record))
         return records
@@ -537,6 +601,51 @@ class AvitoScraper:
             return price
         return extract_price_candidate(fallback_text)
 
+    def _extract_description(self, card: Tag | None, fallback_text: str | None) -> str | None:
+        if card:
+            for selector in ('[data-testid*="description"]', '[class*="description"]', "p"):
+                for node in card.select(selector):
+                    text = sanitize_text(node.get_text(" ", strip=True))
+                    if text and 40 <= len(text) <= 1200:
+                        return text
+        text = sanitize_text(fallback_text)
+        if text and len(text) >= 80:
+            return text[:1200]
+        return None
+
+    def _extract_attribute_texts(self, card: Tag | None) -> list[str]:
+        if not card:
+            return []
+        attributes: list[str] = []
+        seen: set[str] = set()
+        keywords = [
+            "surface",
+            "m2",
+            "m²",
+            "chambre",
+            "pièce",
+            "piece",
+            "sdb",
+            "bain",
+            "étage",
+            "etage",
+            "niveau",
+            "construction",
+            "type",
+            "salon",
+        ]
+        for selector in FEATURE_SELECTORS:
+            for node in card.select(selector):
+                text = sanitize_text(node.get_text(" ", strip=True))
+                if not text or len(text) > 160:
+                    continue
+                key = text.lower()
+                if key in seen or not any(keyword in key for keyword in keywords):
+                    continue
+                seen.add(key)
+                attributes.append(text)
+        return attributes[:40]
+
     def _extract_location(
         self,
         card: Tag | None,
@@ -606,19 +715,41 @@ class AvitoScraper:
         text = sanitize_text(soup.get_text(" ", strip=True))
         if not text:
             return
+        json_objects = extract_json_objects(soup)
+        latitude, longitude = first_latitude_longitude(json_objects)
         city_raw, district_raw = self._extract_location(soup, text)
+        title = first_meta_content(soup, ["og:title", "twitter:title"]) or first_short_text(
+            soup, ["h1"], max_length=240
+        )
+        description = first_meta_content(
+            soup, ["description", "og:description", "twitter:description"]
+        ) or self._extract_description(soup, text)
+        attributes = self._extract_attribute_texts(soup)
+        attribute_text = " ".join(attributes)
+        combined_text = " ".join(
+            part for part in [title, description, attribute_text, text[:3000], url] if part
+        )
         enrichment = {
+            "listing_title_raw": title,
+            "description_raw": description,
             "price_raw": extract_price_candidate(text),
             "city_raw": city_raw,
             "district_raw": district_raw,
+            "property_type_raw": infer_property_type(combined_text, url),
+            "listing_type_raw": detect_listing_type(combined_text, url),
             "surface_raw": self._extract_surface_text(soup, text),
             "bedrooms_raw": self._extract_bedrooms_text(soup, text),
             "bathrooms_raw": self._extract_bathrooms_text(soup, text),
             "floor_raw": self._extract_floor_text(soup, text),
+            "latitude_raw": latitude,
+            "longitude_raw": longitude,
             "construction_year_raw": self._extract_construction_year_text(soup, text),
+            "attributes_raw": encode_attributes(attributes),
+            "detail_scraped": True,
         }
         for key, value in enrichment.items():
-            if not record.get(key) and value:
+            has_value = value is not None and value != "" and value != []
+            if has_value and (not record.get(key) or key in {"attributes_raw"}):
                 record[key] = value
         self._polite_delay()
 
@@ -731,10 +862,104 @@ def extract_bedroom_candidate(text: str | None) -> str | None:
     if not text:
         return None
     if re.search(r"\bstudio\b", text, re.IGNORECASE):
-        return "1 chambre"
+        return "studio"
     match = BEDROOM_RE.search(text)
     if match:
         return sanitize_text(f"{match.group('count')} chambres")
+    return None
+
+
+def infer_property_type(*values: str | None) -> str | None:
+    text = " ".join(value for value in values if value)
+    if not text:
+        return None
+    normalized_path_text = text.lower().replace("_", " ").replace("-", " ")
+    for property_type, pattern in PROPERTY_TYPE_ALIASES:
+        if pattern.search(normalized_path_text):
+            return property_type
+    return None
+
+
+def detect_listing_type(*values: str | None) -> str | None:
+    text = " ".join(value for value in values if value)
+    if not text:
+        return None
+    if RENT_KEYWORD_RE.search(text):
+        return "rent"
+    if SALE_KEYWORD_RE.search(text):
+        return "sale"
+    if re.search(r"\b(?:/fr/location|location_immobiliere|locations?)\b", text, re.IGNORECASE):
+        return "rent"
+    if re.search(r"\b(?:/fr/vente|a_vendre|à_vendre|immobilier)\b", text, re.IGNORECASE):
+        return "sale"
+    return None
+
+
+def encode_attributes(attributes: list[str]) -> str | None:
+    if not attributes:
+        return None
+    return json.dumps(attributes, ensure_ascii=False)
+
+
+def extract_json_objects(soup: BeautifulSoup) -> list[Any]:
+    objects: list[Any] = []
+    for script in soup.select('script[type="application/ld+json"], script#__NEXT_DATA__'):
+        payload = script.string or script.get_text(strip=True)
+        if not payload:
+            continue
+        try:
+            objects.append(json.loads(payload))
+        except json.JSONDecodeError:
+            continue
+    return objects
+
+
+def extract_latitude_longitude(value: Any) -> tuple[str | None, str | None]:
+    latitude: str | None = None
+    longitude: str | None = None
+    if isinstance(value, dict):
+        if isinstance(value.get("geo"), dict):
+            nested_lat, nested_lon = extract_latitude_longitude(value["geo"])
+            latitude = latitude or nested_lat
+            longitude = longitude or nested_lon
+        for key, nested in value.items():
+            key_lower = str(key).lower()
+            if key_lower in LATITUDE_KEYS and latitude is None:
+                latitude = sanitize_text(nested)
+            elif key_lower in LONGITUDE_KEYS and longitude is None:
+                longitude = sanitize_text(nested)
+            elif latitude is None or longitude is None:
+                nested_lat, nested_lon = extract_latitude_longitude(nested)
+                latitude = latitude or nested_lat
+                longitude = longitude or nested_lon
+            if latitude and longitude:
+                return latitude, longitude
+    elif isinstance(value, list):
+        for item in value:
+            nested_lat, nested_lon = extract_latitude_longitude(item)
+            latitude = latitude or nested_lat
+            longitude = longitude or nested_lon
+            if latitude and longitude:
+                return latitude, longitude
+    return latitude, longitude
+
+
+def first_latitude_longitude(values: list[Any]) -> tuple[str | None, str | None]:
+    for value in values:
+        latitude, longitude = extract_latitude_longitude(value)
+        if latitude and longitude:
+            return latitude, longitude
+    return None, None
+
+
+def first_meta_content(soup: BeautifulSoup, names: list[str]) -> str | None:
+    for name in names:
+        selector = f'meta[name="{name}"], meta[property="{name}"]'
+        node = soup.select_one(selector)
+        if node:
+            text = sanitize_text(node.get("content"))
+            if text:
+                return text
     return None
 
 

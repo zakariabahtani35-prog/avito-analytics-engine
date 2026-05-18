@@ -51,15 +51,22 @@ def load_bi_schema(batch_id: str) -> int:
             cursor.execute(
                 """
                 INSERT INTO bi_schema.fact_listing (
-                    time_id, location_id, price, listing_url, batch_id
+                    time_id, location_id, price, property_type, listing_type,
+                    surface_m2, price_per_m2, listing_url, batch_id
                 )
                 SELECT
                     dt.time_id,
                     dl.location_id,
                     cl.price,
+                    cl.property_type,
+                    cl.listing_type,
+                    feat.surface_m2,
+                    feat.price_per_m2,
                     cl.listing_url,
                     cl.batch_id
                 FROM clean.clean_listings cl
+                LEFT JOIN clean.clean_listing_features feat
+                  ON feat.listing_url = cl.listing_url
                 JOIN bi_schema.dim_time dt
                   ON dt.date = cl.scraped_at::date
                 JOIN bi_schema.dim_location dl
@@ -70,6 +77,10 @@ def load_bi_schema(batch_id: str) -> int:
                     time_id = EXCLUDED.time_id,
                     location_id = EXCLUDED.location_id,
                     price = EXCLUDED.price,
+                    property_type = EXCLUDED.property_type,
+                    listing_type = EXCLUDED.listing_type,
+                    surface_m2 = EXCLUDED.surface_m2,
+                    price_per_m2 = EXCLUDED.price_per_m2,
                     batch_id = EXCLUDED.batch_id;
                 """,
                 {"batch_id": batch_id},

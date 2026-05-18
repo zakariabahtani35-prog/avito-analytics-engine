@@ -11,9 +11,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_ENV_FILE = PROJECT_ROOT.parent / ".env"
 PROJECT_ENV_FILE = PROJECT_ROOT / ".env"
 
+_PROCESS_ENV = dict(os.environ)
 if WORKSPACE_ENV_FILE.exists():
-    load_dotenv(WORKSPACE_ENV_FILE, override=True)
+    load_dotenv(WORKSPACE_ENV_FILE, override=False)
 load_dotenv(PROJECT_ENV_FILE, override=True)
+for _name, _value in _PROCESS_ENV.items():
+    os.environ[_name] = _value
 
 
 def _get_bool(name: str, default: bool) -> bool:
@@ -63,15 +66,15 @@ class Settings:
     avito_search_url: str = os.getenv(
         "AVITO_SEARCH_URL", "https://www.avito.ma/fr/maroc/immobilier"
     )
-    scraper_target_listings: int = _get_int("SCRAPER_TARGET_LISTINGS", 1000)
-    scraper_max_pages: int = _get_int("SCRAPER_MAX_PAGES", 150)
-    scraper_delay_seconds: float = _get_float("SCRAPER_DELAY_SECONDS", 3.0)
-    scraper_timeout_seconds: int = _get_int("SCRAPER_TIMEOUT_SECONDS", 30)
+    scraper_target_listings: int = _get_int("SCRAPER_TARGET_LISTINGS", 10000)
+    scraper_max_pages: int = _get_int("SCRAPER_MAX_PAGES", 1000)
+    scraper_delay_seconds: float = _get_float("SCRAPER_DELAY_SECONDS", 2.0)
+    scraper_timeout_seconds: int = _get_int("SCRAPER_TIMEOUT_SECONDS", 60)
     scraper_max_retries: int = _get_int("SCRAPER_MAX_RETRIES", 3)
     scraper_max_blocked_responses: int = _get_int("SCRAPER_MAX_BLOCKED_RESPONSES", 5)
     scraper_max_empty_pages: int = _get_int("SCRAPER_MAX_EMPTY_PAGES", 3)
     robots_strict: bool = _get_bool_any(("SCRAPER_STRICT_ROBOTS", "ROBOTS_STRICT"), False)
-    fetch_detail_pages: bool = _get_bool("FETCH_DETAIL_PAGES", False)
+    fetch_detail_pages: bool = _get_bool("FETCH_DETAIL_PAGES", True)
     clean_staging_after_success: bool = _get_bool("CLEAN_STAGING_AFTER_SUCCESS", False)
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
 

@@ -43,6 +43,8 @@ NON_PRIVACY_TEXT_COLUMNS = {
     "batch_id",
     "price",
     "price_raw",
+    "description_raw",
+    "description_clean",
     "surface_m2",
     "surface_raw",
     "bedrooms",
@@ -55,6 +57,25 @@ NON_PRIVACY_TEXT_COLUMNS = {
     "construction_year_raw",
     "price_per_m2",
     "property_age",
+    "property_type",
+    "property_type_raw",
+    "listing_type",
+    "listing_type_raw",
+    "latitude",
+    "longitude",
+    "latitude_raw",
+    "longitude_raw",
+    "attributes_raw",
+    "rooms_total",
+    "price_per_room",
+    "room_density",
+    "luxury_flag",
+    "coastal_city",
+    "surface_x_rooms",
+    "bathrooms_per_bedroom",
+    "extraction_score",
+    "feature_completeness_score",
+    "detail_scraped",
 }
 
 
@@ -463,13 +484,19 @@ def run_data_quality_checks(
                 WHERE (
                     (
                         COALESCE(listing_title_clean, '') || ' ' ||
+                        COALESCE(description_clean, '') || ' ' ||
                         COALESCE(city, '') || ' ' ||
-                        COALESCE(district, '')
+                        COALESCE(district, '') || ' ' ||
+                        COALESCE(property_type, '') || ' ' ||
+                        COALESCE(listing_type, '')
                     ) ~* %(email_re)s
                     OR (
                         COALESCE(listing_title_clean, '') || ' ' ||
+                        COALESCE(description_clean, '') || ' ' ||
                         COALESCE(city, '') || ' ' ||
-                        COALESCE(district, '')
+                        COALESCE(district, '') || ' ' ||
+                        COALESCE(property_type, '') || ' ' ||
+                        COALESCE(listing_type, '')
                     ) ~* %(phone_re)s
                 )
                 {batch_clause};
@@ -518,6 +545,9 @@ def run_data_quality_checks(
                     OR price IS NULL
                     OR city IS NULL
                     OR district IS NULL
+                    OR property_type IS NULL
+                    OR listing_type IS NULL
+                    OR listing_type NOT IN ('sale', 'rent')
                     OR listing_url IS NULL
                     OR scraped_at IS NULL
                     OR batch_id IS NULL
@@ -562,7 +592,7 @@ def run_data_quality_checks(
             optional_conditions = []
             if "surface_m2" in available_feature_columns:
                 optional_conditions.append(
-                    "(feat.surface_m2 IS NOT NULL AND (feat.surface_m2 < 10 OR feat.surface_m2 > 2000))"
+                    f"(feat.surface_m2 IS NOT NULL AND (feat.surface_m2 < {SURFACE_MIN} OR feat.surface_m2 > {SURFACE_MAX}))"
                 )
             if "bedrooms" in available_feature_columns:
                 optional_conditions.append(
@@ -578,7 +608,7 @@ def run_data_quality_checks(
                 )
             if "price_per_m2" in available_feature_columns:
                 optional_conditions.append(
-                    "(feat.price_per_m2 IS NOT NULL AND (feat.price_per_m2 < 100 OR feat.price_per_m2 > 100000))"
+                    f"(feat.price_per_m2 IS NOT NULL AND (feat.price_per_m2 < {PRICE_PER_M2_MIN} OR feat.price_per_m2 > {PRICE_PER_M2_MAX}))"
                 )
             if features_table_exists and optional_conditions:
                 cursor.execute(
@@ -667,12 +697,40 @@ def run_data_quality_checks(
                 params,
             )
             ml_count = int(cursor.fetchone()["count"])
+            cursor.execute(
+                f"""
+                SELECT COUNT(*) AS count
+                FROM clean.clean_listings
+                WHERE listing_type = 'sale' {batch_clause};
+                """,
+                params,
+            )
+            sale_clean_count = int(cursor.fetchone()["count"])
             checks.append(
                 QualityResult(
-                    "ml_count_equals_clean_count",
-                    ml_count == clean_count,
-                    abs(ml_count - clean_count),
-                    f"ml={ml_count}, clean={clean_count}",
+                    "ml_count_not_greater_than_sale_clean_count",
+                    ml_count <= sale_clean_count,
+                    max(ml_count - sale_clean_count, 0),
+                    f"ml={ml_count}, sale_clean={sale_clean_count}, clean={clean_count}",
+                )
+            )
+
+            cursor.execute(
+                f"""
+                SELECT COUNT(*) AS bad_rows
+                FROM ml_schema.ml_property_features
+                WHERE listing_type <> 'sale' OR listing_type IS NULL
+                {batch_clause};
+                """,
+                params,
+            )
+            bad_rows = cursor.fetchone()["bad_rows"]
+            checks.append(
+                QualityResult(
+                    "ml_no_rental_contamination",
+                    bad_rows == 0,
+                    int(bad_rows),
+                    "ML OBT must contain only sale listings",
                 )
             )
 

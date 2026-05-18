@@ -36,44 +36,55 @@ RAW_DIR = BASE_DIR / "data" / "raw"
 CLEAN_DIR = BASE_DIR / "data" / "clean"
 CLEAN_DIR.mkdir(parents=True, exist_ok=True)
 
-PRICE_MIN = Decimal("10000.00")
-PRICE_MAX = Decimal("50000000.00")
+SALE_PRICE_MIN = Decimal("100000.00")
+SALE_PRICE_MAX = Decimal("100000000.00")
+RENT_PRICE_MIN = Decimal("300.00")
+RENT_PRICE_MAX = Decimal("250000.00")
+PRICE_MIN = RENT_PRICE_MIN
+PRICE_MAX = SALE_PRICE_MAX
 
-SURFACE_MIN = Decimal("40.00")
-SURFACE_MAX = Decimal("400.00")
+SURFACE_MIN = Decimal("10.00")
+SURFACE_MAX = Decimal("20000.00")
 
 BEDROOMS_MIN = 0
-BEDROOMS_MAX = 8
-
+BEDROOMS_MAX = 20
 BATHROOMS_MIN = 0
-BATHROOMS_MAX = 5
-
+BATHROOMS_MAX = 20
 FLOOR_MIN = 0
-FLOOR_MAX = 20
+FLOOR_MAX = 60
 
-PRICE_PER_M2_MIN = Decimal("1000.00")
-PRICE_PER_M2_MAX = Decimal("30000.00")
-
-REQUIRED_CLEAN_COLUMNS = CLEAN_CORE_CSV_COLUMNS
-OPTIONAL_FEATURE_COLUMNS = [
-    "surface_m2",
-    "bedrooms",
-    "bathrooms",
-    "floor",
-    "price_per_m2",
-]
-INTERNAL_OPTIONAL_COLUMNS = [
-    *OPTIONAL_FEATURE_COLUMNS,
-    "construction_year",
-    "property_age",
-]
+PRICE_PER_M2_MIN = Decimal("100.00")
+PRICE_PER_M2_MAX = Decimal("100000.00")
 
 TWO_PLACES = Decimal("0.01")
-ZERO_PLACES = Decimal("1")
+FOUR_PLACES = Decimal("0.0001")
+SIX_PLACES = Decimal("0.000001")
+
+REQUIRED_CLEAN_COLUMNS = [
+    "listing_title_clean",
+    "price",
+    "city",
+    "district",
+    "property_type",
+    "listing_type",
+    "listing_url",
+    "scraped_at",
+    "batch_id",
+]
+
+OPTIONAL_FEATURE_COLUMNS = [
+    column for column in CLEAN_FEATURE_CSV_COLUMNS if column not in {"listing_url", "batch_id"}
+]
+INTERNAL_OPTIONAL_COLUMNS = [
+    "description_clean",
+    "latitude",
+    "longitude",
+    *OPTIONAL_FEATURE_COLUMNS,
+]
 
 PRICE_NUMBER_PATTERN = (
-    r"(?:\d{1,3}(?:[\s.]\d{3})+(?:[,.]\d{1,2})?"
-    r"|\d{4,}(?:[,.]\d{1,2})?)"
+    r"(?:\d{1,3}(?:[\s.\u202f]\d{3})+(?:[,.]\d{1,2})?"
+    r"|\d{2,}(?:[,.]\d{1,2})?)"
 )
 PRICE_RE = re.compile(
     rf"(?P<number>{PRICE_NUMBER_PATTERN})\s*(?:dhs?|mad|dirhams?)\b",
@@ -85,21 +96,23 @@ MILLION_PRICE_RE = re.compile(
     re.IGNORECASE,
 )
 SURFACE_RE = re.compile(
-    r"(?<!\d)(?P<number>\d{1,5}(?:[,.]\d{1,2})?)\s*(?:m2|m²|mÂ²|m\^2)\b",
+    r"(?<!\d)(?P<number>\d{1,6}(?:[,.]\d{1,2})?)\s*(?:m2|m²|mÂ²|m\^2)\b",
     re.IGNORECASE,
 )
 SURFACE_KEYWORD_RE = re.compile(
-    r"\b(?:surface|superficie)\D{0,24}(?P<number>\d{1,5}(?:[,.]\d{1,2})?)\b",
+    r"\b(?:surface|superficie|terrain)\D{0,28}(?P<number>\d{1,6}(?:[,.]\d{1,2})?)\b",
     re.IGNORECASE,
 )
 BEDROOM_RE = re.compile(
-    r"(?<!\d)(?P<number>\d{1,2})\s*(?:chambres?|pieces?|pièces?)\b",
+    r"(?<!\d)(?P<number>\d{1,2})\s*(?:chambres?|ch\.|rooms?)\b",
     re.IGNORECASE,
 )
+ROOM_RE = re.compile(r"(?<!\d)(?P<number>\d{1,2})\s*(?:pieces?|pièces?)\b", re.IGNORECASE)
 BATHROOM_RE = re.compile(
-    r"(?<!\d)(?P<number>\d{1,2})\s*(?:sdbs?|bains?|salles?\s+de\s+bain)\b",
+    r"(?<!\d)(?P<number>\d{1,2})\s*(?:sdbs?|bains?|salles?\s+de\s+bain|bathrooms?)\b",
     re.IGNORECASE,
 )
+BATHROOM_SINGLE_RE = re.compile(r"\b(?:sdb|bain|salle\s+de\s+bain)\b", re.IGNORECASE)
 FLOOR_RE = re.compile(
     r"\b(?:étage|etage|niveau)\s*(?P<floor>-?\d{1,2})\b|"
     r"\b(?P<floor_before>-?\d{1,2})(?:er|eme|e|ème)?\s*(?:étage|etage|niveau)\b",
@@ -111,20 +124,22 @@ GROUND_FLOOR_RE = re.compile(
 )
 YEAR_RE = re.compile(r"\b(18\d{2}|19\d{2}|20\d{2})\b")
 CONSTRUCTION_YEAR_RE = re.compile(
-    r"\b(?:construction|construit|année|annee)\D{0,24}(18\d{2}|19\d{2}|20\d{2})\b",
+    r"\b(?:construction|construit|année|annee|neuf|livré|livraison)\D{0,28}"
+    r"(18\d{2}|19\d{2}|20\d{2})\b",
     re.IGNORECASE,
 )
 LOCATION_RE = re.compile(
     r"\b(?:appartements?|villas?\s+et\s+riads?|terrains?\s+et\s+fermes?|"
-    r"locaux?|local|bureaux?|maisons?)\s+dans\s+"
+    r"locaux?|local|bureaux?|maisons?|immobilier)\s+dans\s+"
     r"(?P<city>[A-Za-zÀ-ÿ\s'-]+)"
     r"(?:,\s*(?P<district>[A-Za-zÀ-ÿ0-9\s'/-]+?))?"
     r"(?=\s+(?:appartement|villa|terrain|bureau|magasin|local|studio|duplex|"
-    r"riad|a vendre|à vendre|location|chambre|maison)|$)",
+    r"riad|maison|a vendre|à vendre|location|chambre)|$)",
     re.IGNORECASE,
 )
 LOCATION_NOISE_RE = re.compile(
-    r"\b(?:toute la ville|autre secteur|premium|star|contacter|vendeur|prix|mad|dh)\b",
+    r"\b(?:toute la ville|autre secteur|premium|star|contacter|vendeur|prix|mad|dh|"
+    r"particulier|professionnel|publie|publié)\b",
     re.IGNORECASE,
 )
 ADDRESS_HINT_RE = re.compile(
@@ -138,13 +153,13 @@ TITLE_ACTION_RE = re.compile(
 )
 CATEGORY_LOCATION_PREFIX_RE = re.compile(
     r"^(?:appartements?|villas?\s+et\s+riads?|terrains?\s+et\s+fermes?|"
-    r"locaux?|local|bureaux?|maisons?)\s+dans\s+"
+    r"locaux?|local|bureaux?|maisons?|immobilier)\s+dans\s+"
     r"[A-Za-zÀ-ÿ\s'-]+(?:,\s*[A-Za-zÀ-ÿ0-9\s'/-]+?)?\s+"
     r"(?=(?:appartement|villa|terrain|bureau|magasin|local|studio|duplex|riad|maison)\b)",
     re.IGNORECASE,
 )
 SELLER_PREFIX_RE = re.compile(
-    r"^.{0,100}?\bil\s+y\s+a\s+\d+\s+(?:minutes?|heures?|jours?|mois)\s+",
+    r"^.{0,120}?\bil\s+y\s+a\s+\d+\s+(?:minutes?|heures?|jours?|mois)\s+",
     re.IGNORECASE,
 )
 TRAILING_FEATURE_RE = re.compile(
@@ -152,6 +167,31 @@ TRAILING_FEATURE_RE = re.compile(
     r"salles?\s+de\s+bain)\b.*$",
     re.IGNORECASE,
 )
+RENT_KEYWORD_RE = re.compile(
+    r"\b(?:location|louer|à\s+louer|a\s+louer|loyer|par\s+mois|/mois|"
+    r"mensuel|mois|jour|journée|journee|nuit|nuitée|nuitee|vacances?|estival)\b",
+    re.IGNORECASE,
+)
+SALE_KEYWORD_RE = re.compile(
+    r"\b(?:vente|vendre|vend|à\s+vendre|a\s+vendre|titre\s+foncier|titré|titre)\b",
+    re.IGNORECASE,
+)
+LUXURY_RE = re.compile(
+    r"\b(?:luxe|haut\s+standing|prestige|premium|piscine|golf|vue\s+mer|"
+    r"front\s+mer|marina|neuf|résidence\s+fermée|residence\s+fermee)\b",
+    re.IGNORECASE,
+)
+PROPERTY_TYPE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("studio", re.compile(r"\bstudio\b", re.IGNORECASE)),
+    ("duplex", re.compile(r"\bduplex\b", re.IGNORECASE)),
+    ("apartment", re.compile(r"\b(?:appartement|appartements|apt)\b", re.IGNORECASE)),
+    ("villa", re.compile(r"\b(?:villa|villas)\b", re.IGNORECASE)),
+    ("riad", re.compile(r"\b(?:riad|riads)\b", re.IGNORECASE)),
+    ("house", re.compile(r"\b(?:maison|maisons)\b", re.IGNORECASE)),
+    ("land", re.compile(r"\b(?:terrain|terrains|ferme|fermes)\b", re.IGNORECASE)),
+    ("office", re.compile(r"\b(?:bureau|bureaux|plateau\s+bureau)\b", re.IGNORECASE)),
+    ("commercial", re.compile(r"\b(?:local|locaux|magasin|commerce)\b", re.IGNORECASE)),
+]
 
 CATEGORY_SLUGS = {
     "appartements",
@@ -162,6 +202,7 @@ CATEGORY_SLUGS = {
     "locaux",
     "local",
     "maisons",
+    "immobilier",
 }
 KNOWN_CITY_SLUGS = {
     "agadir",
@@ -187,6 +228,19 @@ KNOWN_CITY_SLUGS = {
     "témara",
     "tetouan",
     "tétouan",
+}
+COASTAL_CITIES = {
+    "Agadir",
+    "Casablanca",
+    "Dar Bouazza",
+    "El Jadida",
+    "Kénitra",
+    "Mohammedia",
+    "Rabat",
+    "Salé",
+    "Tanger",
+    "Témara",
+    "Tétouan",
 }
 
 
@@ -262,6 +316,22 @@ def _source_value(row: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _combined_text(row: dict[str, Any]) -> str:
+    values = [
+        row.get("listing_title_raw"),
+        row.get("listing_title"),
+        row.get("description_raw"),
+        row.get("attributes_raw"),
+        row.get("price_raw"),
+        row.get("city_raw"),
+        row.get("district_raw"),
+        row.get("property_type_raw"),
+        row.get("listing_type_raw"),
+        row.get("listing_url"),
+    ]
+    return " ".join(clean_text(value) or "" for value in values)
+
+
 def _decimal_from_number_token(token: str, multiplier: Decimal = Decimal("1")) -> Decimal | None:
     if not token:
         return None
@@ -288,8 +358,8 @@ def _decimal_from_number_token(token: str, multiplier: Decimal = Decimal("1")) -
 
 
 def _is_monthly_price_context(text: str, end_index: int) -> bool:
-    after = text[end_index : end_index + 40]
-    return bool(re.match(r"\s*(?:/|par)?\s*mois\b", after, re.IGNORECASE))
+    around = text[max(0, end_index - 30) : end_index + 60]
+    return bool(RENT_KEYWORD_RE.search(around) or re.search(r"/\s*mois", around, re.IGNORECASE))
 
 
 def _price_candidates(text: Any) -> list[tuple[int, Decimal, bool]]:
@@ -320,10 +390,30 @@ def parse_decimal(value: Any) -> Decimal | None:
     text = clean_text(value)
     if not text:
         return None
-    match = re.search(r"-?\d+(?:[\s.]\d{3})*(?:[,.]\d+)?", text)
+    match = re.search(r"-?\d+(?:[\s.\u202f]\d{3})*(?:[,.]\d+)?", text)
     if not match:
         return None
     return _decimal_from_number_token(match.group(0))
+
+
+def parse_plain_decimal(
+    value: Any,
+    minimum: Decimal | None = None,
+    maximum: Decimal | None = None,
+    quant: Decimal | None = None,
+) -> Decimal | None:
+    text = clean_text(value)
+    if not text:
+        return None
+    try:
+        number = Decimal(text.replace(",", "."))
+    except (InvalidOperation, ValueError):
+        return None
+    if minimum is not None and number < minimum:
+        return None
+    if maximum is not None and number > maximum:
+        return None
+    return number.quantize(quant, rounding=ROUND_HALF_UP) if quant else number
 
 
 def _first_valid_decimal(
@@ -339,17 +429,28 @@ def _first_valid_decimal(
     return None
 
 
-def parse_price(*values: Any) -> Decimal | None:
+def _price_range_for_listing_type(listing_type: str | None) -> tuple[Decimal, Decimal]:
+    if listing_type == "rent":
+        return RENT_PRICE_MIN, RENT_PRICE_MAX
+    return SALE_PRICE_MIN, SALE_PRICE_MAX
+
+
+def parse_price(*values: Any, listing_type: str | None = None) -> Decimal | None:
+    minimum, maximum = _price_range_for_listing_type(listing_type)
     for value in values:
         candidates = _price_candidates(value)
-        non_monthly = [candidate for candidate in candidates if not candidate[2]]
-        for _start, amount, _monthly in non_monthly or candidates:
-            if PRICE_MIN <= amount <= PRICE_MAX:
+        if listing_type == "rent":
+            ordered = candidates
+        else:
+            non_monthly = [candidate for candidate in candidates if not candidate[2]]
+            ordered = non_monthly or candidates
+        for _start, amount, _monthly in ordered:
+            if minimum <= amount <= maximum:
                 return amount
         text = clean_text(value)
-        if text and re.fullmatch(r"\d+(?:[\s.]\d{3})*(?:[,.]\d{1,2})?", text):
+        if text and re.fullmatch(r"\d+(?:[\s.\u202f]\d{3})*(?:[,.]\d{1,2})?", text):
             amount = parse_decimal(text)
-            if amount is not None and PRICE_MIN <= amount <= PRICE_MAX:
+            if amount is not None and minimum <= amount <= maximum:
                 return amount
     return None
 
@@ -358,7 +459,6 @@ def _surface_candidates(text: Any) -> list[Decimal]:
     value = clean_text(text)
     if not value:
         return []
-
     candidates: list[Decimal] = []
     for pattern in (SURFACE_RE, SURFACE_KEYWORD_RE):
         for match in pattern.finditer(value):
@@ -368,15 +468,16 @@ def _surface_candidates(text: Any) -> list[Decimal]:
     return candidates
 
 
-def parse_surface(*values: Any) -> Decimal | None:
+def parse_surface(*values: Any, property_type: str | None = None) -> Decimal | None:
+    max_surface = Decimal("20000.00") if property_type == "land" else SURFACE_MAX
     for value in values:
         for amount in _surface_candidates(value):
-            if SURFACE_MIN <= amount <= SURFACE_MAX:
+            if SURFACE_MIN <= amount <= max_surface:
                 return amount
         text = clean_text(value)
         if text and re.fullmatch(r"\d+(?:[,.]\d{1,2})?", text):
             amount = parse_decimal(text)
-            if amount is not None and SURFACE_MIN <= amount <= SURFACE_MAX:
+            if amount is not None and SURFACE_MIN <= amount <= max_surface:
                 return amount
     return None
 
@@ -413,18 +514,28 @@ def _parse_count_from_pattern(
 
 
 def parse_bedrooms(*values: Any) -> int | None:
-    count = _parse_count_from_pattern(BEDROOM_RE, values, BEDROOMS_MIN, BEDROOMS_MAX)
-    if count is not None:
-        return count
     for value in values:
         text = clean_text(value)
         if text and re.search(r"\bstudio\b", text, re.IGNORECASE):
             return 0
+    count = _parse_count_from_pattern(BEDROOM_RE, values, BEDROOMS_MIN, BEDROOMS_MAX)
+    if count is not None:
+        return count
+    room_count = _parse_count_from_pattern(ROOM_RE, values, 1, BEDROOMS_MAX + 2)
+    if room_count is not None:
+        return max(room_count - 1, 0)
     return None
 
 
 def parse_bathrooms(*values: Any) -> int | None:
-    return _parse_count_from_pattern(BATHROOM_RE, values, BATHROOMS_MIN, BATHROOMS_MAX)
+    count = _parse_count_from_pattern(BATHROOM_RE, values, BATHROOMS_MIN, BATHROOMS_MAX)
+    if count is not None:
+        return count
+    for value in values:
+        text = clean_text(value)
+        if text and BATHROOM_SINGLE_RE.search(text):
+            return 1
+    return None
 
 
 def parse_floor(value: Any, *, focused: bool = False) -> int | None:
@@ -435,6 +546,9 @@ def parse_floor(value: Any, *, focused: bool = False) -> int | None:
         return 0
     match = FLOOR_RE.search(text)
     if not match:
+        if focused:
+            focused_floor = parse_int_feature(text, FLOOR_MIN, FLOOR_MAX)
+            return focused_floor if focused_floor and focused_floor > 0 else None
         return None
     floor_text = match.group("floor") or match.group("floor_before")
     if floor_text is None:
@@ -465,13 +579,26 @@ def parse_construction_year(*values: Any, current_year: int | None = None) -> in
         if not match:
             continue
         year = int(match.group(1))
-        if 1800 <= year <= year_limit and year_limit - year <= 150:
+        if 1800 <= year <= year_limit and year_limit - year <= 200:
             return year
     return None
 
 
+def parse_coordinate(value: Any, minimum: Decimal, maximum: Decimal) -> Decimal | None:
+    text = clean_text(value)
+    if not text:
+        return None
+    try:
+        number = Decimal(text.replace(",", "."))
+    except InvalidOperation:
+        return None
+    if minimum <= number <= maximum:
+        return number.quantize(SIX_PLACES, rounding=ROUND_HALF_UP)
+    return None
+
+
 def _title_case_location(value: str) -> str:
-    particles = {"de", "du", "des", "la", "le", "les", "el", "al", "et"}
+    particles = {"de", "du", "des", "la", "le", "les", "el", "al", "et", "ben", "ibn"}
     words = []
     for word in re.split(r"(\s+|-|')", value.lower()):
         if not word or word.isspace() or word in {"-", "'"}:
@@ -491,26 +618,26 @@ def standardize_city(value: Any) -> str | None:
     key = _normal_key(text)
     aliases = {
         "agadir": "Agadir",
-        "beni mellal": "B\u00e9ni Mellal",
+        "beni mellal": "Béni Mellal",
         "bouskoura": "Bouskoura",
         "casa": "Casablanca",
         "casablanca": "Casablanca",
         "dar bouazza": "Dar Bouazza",
         "el jadida": "El Jadida",
-        "fes": "F\u00e8s",
-        "f s": "F\u00e8s",
+        "fes": "Fès",
+        "f s": "Fès",
         "ifrane": "Ifrane",
-        "kenitra": "K\u00e9nitra",
+        "kenitra": "Kénitra",
         "marrakech": "Marrakech",
         "marrakesh": "Marrakech",
-        "meknes": "Mekn\u00e8s",
+        "meknes": "Meknès",
         "mohammedia": "Mohammedia",
         "oujda": "Oujda",
         "rabat": "Rabat",
-        "sale": "Sal\u00e9",
+        "sale": "Salé",
         "tanger": "Tanger",
-        "temara": "T\u00e9mara",
-        "tetouan": "T\u00e9touan",
+        "temara": "Témara",
+        "tetouan": "Tétouan",
     }
     return aliases.get(key, _title_case_location(text))
 
@@ -598,7 +725,12 @@ def clean_listing_title(value: Any, listing_url: Any | None = None) -> str | Non
     if category_match:
         text = text[category_match.end() :]
     text = TITLE_ACTION_RE.sub("", text)
-    text = re.sub(r"\b\d+(?:[\s.]\d{3})*(?:[,.]\d+)?\s*(?:dhs?|mad|dirhams?)\b.*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"\b\d+(?:[\s.\u202f]\d{3})*(?:[,.]\d+)?\s*(?:dhs?|mad|dirhams?)\b.*$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
     text = TRAILING_FEATURE_RE.sub("", text)
     text = re.sub(r"\b(?:étage|etage|niveau)\s*-?\d{1,2}\b.*$", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\b(?:rdc|rez\s+de\s+chaussée|rez\s+de\s+chaussee)\b.*$", "", text, flags=re.IGNORECASE)
@@ -621,6 +753,46 @@ def build_listing_title_clean(row: dict[str, Any]) -> str | None:
     )
 
 
+def standardize_property_type(*values: Any) -> str | None:
+    text = " ".join(clean_text(value) or "" for value in values)
+    if not text:
+        return None
+    normalized = text.lower().replace("_", " ").replace("-", " ")
+    canonical = {
+        "apartment",
+        "studio",
+        "villa",
+        "riad",
+        "duplex",
+        "house",
+        "land",
+        "office",
+        "commercial",
+    }
+    for token in re.split(r"[^a-z]+", normalized):
+        if token in canonical:
+            return token
+    for property_type, pattern in PROPERTY_TYPE_PATTERNS:
+        if pattern.search(normalized):
+            return property_type
+    return None
+
+
+def detect_listing_type(*values: Any, price: Decimal | None = None) -> str:
+    raw_values = [clean_text(value) for value in values if clean_text(value)]
+    text = " ".join(raw_values)
+    key = _normal_key(text)
+    if key in {"sale", "rent"}:
+        return key
+    if SALE_KEYWORD_RE.search(text):
+        return "sale"
+    if RENT_KEYWORD_RE.search(text):
+        return "rent"
+    if price is not None and price < SALE_PRICE_MIN:
+        return "rent"
+    return "sale"
+
+
 def _parse_scraped_at(value: Any) -> str | None:
     text = clean_text(value)
     if not text:
@@ -634,50 +806,143 @@ def _parse_scraped_at(value: Any) -> str | None:
     return parsed.isoformat(timespec="seconds")
 
 
-def _safe_price_per_m2(price: Decimal | None, surface: Decimal | None) -> Decimal | None:
+def _price_per_m2_range(property_type: str | None) -> tuple[Decimal, Decimal]:
+    if property_type == "land":
+        return Decimal("50.00"), Decimal("60000.00")
+    if property_type in {"office", "commercial"}:
+        return Decimal("500.00"), Decimal("90000.00")
+    return Decimal("1000.00"), Decimal("100000.00")
+
+
+def _safe_price_per_m2(
+    price: Decimal | None,
+    surface: Decimal | None,
+    property_type: str | None,
+) -> Decimal | None:
     if price is None or surface is None or surface <= 0:
         return None
     value = (price / surface).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
-    if PRICE_PER_M2_MIN <= value <= PRICE_PER_M2_MAX:
+    minimum, maximum = _price_per_m2_range(property_type)
+    if minimum <= value <= maximum:
         return value
     return None
-def _validate_feature_row(row: dict[str, Any]) -> dict[str, Any]:
-    surface = row.get("surface_m2")
-    price_per_m2 = row.get("price_per_m2")
 
-    if isinstance(surface, Decimal) and not (Decimal("40.00") <= surface <= Decimal("400.00")):
-        row["surface_m2"] = None
-        row["price_per_m2"] = None
 
-    if isinstance(price_per_m2, Decimal) and not (
-        Decimal("1000.00") <= price_per_m2 <= Decimal("30000.00")
-    ):
-        row["price_per_m2"] = None
+def _safe_decimal_divide(
+    numerator: Decimal | None,
+    denominator: Decimal | int | None,
+    quant: Decimal = TWO_PLACES,
+) -> Decimal | None:
+    if numerator is None or denominator in {None, 0, Decimal("0")}:
+        return None
+    try:
+        return (numerator / Decimal(str(denominator))).quantize(quant, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError, ZeroDivisionError):
+        return None
 
-    if row.get("bedrooms") is not None and row["bedrooms"] > 8:
-        row["bedrooms"] = None
-
-    if row.get("bathrooms") is not None and row["bathrooms"] > 5:
-        row["bathrooms"] = None
-
-    if row.get("floor") is not None and row["floor"] > 20:
-        row["floor"] = None
-
-    return row
 
 def _resolve_location(row: dict[str, Any]) -> tuple[str | None, str | None]:
     title_raw = _source_value(row, "listing_title_raw", "listing_title")
+    description_raw = _source_value(row, "description_raw")
+    combined = " ".join(clean_text(value) or "" for value in [title_raw, description_raw])
     city = standardize_city(_source_value(row, "city_raw", "city"))
     district = standardize_district(_source_value(row, "district_raw", "district"))
-
-    text_city, text_district = _location_from_text(title_raw)
+    text_city, text_district = _location_from_text(combined)
     url_city, url_district = _location_from_url(_source_value(row, "listing_url"))
 
     city = city or text_city or url_city
     district = district or text_district or url_district
     if city and district and _normal_key(city) == _normal_key(district):
-        district = district
+        district = None
     return city, district
+
+
+def _property_age_bucket(property_age: int | None) -> str | None:
+    if property_age is None:
+        return None
+    if property_age <= 2:
+        return "new"
+    if property_age <= 10:
+        return "recent"
+    if property_age <= 30:
+        return "established"
+    return "old"
+
+
+def _rooms_total(property_type: str | None, bedrooms: int | None, bathrooms: int | None) -> int | None:
+    if property_type == "land":
+        return 0
+    if bedrooms is None and bathrooms is None:
+        return None
+    if bedrooms == 0 and property_type == "studio":
+        return 1 + (bathrooms or 0)
+    return (bedrooms or 0) + (bathrooms or 0)
+
+
+def _extraction_score(row: dict[str, Any]) -> Decimal:
+    raw_fields = [
+        "listing_title_raw",
+        "description_raw",
+        "price_raw",
+        "city_raw",
+        "district_raw",
+        "property_type_raw",
+        "surface_raw",
+        "bedrooms_raw",
+        "bathrooms_raw",
+        "floor_raw",
+        "attributes_raw",
+    ]
+    present = sum(1 for field in raw_fields if not _is_missing(row.get(field)))
+    return (Decimal(present) / Decimal(len(raw_fields))).quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
+
+
+def _feature_completeness_score(row: dict[str, Any]) -> Decimal:
+    fields = [
+        "price",
+        "city",
+        "district",
+        "property_type",
+        "listing_type",
+        "surface_m2",
+        "bedrooms",
+        "bathrooms",
+        "floor",
+        "price_per_m2",
+    ]
+    present = sum(1 for field in fields if row.get(field) not in {None, ""})
+    return (Decimal(present) / Decimal(len(fields))).quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
+
+
+def _invalid_feature_reason(row: dict[str, Any]) -> str | None:
+    listing_type = row.get("listing_type")
+    property_type = row.get("property_type")
+    price = row.get("price")
+    surface = row.get("surface_m2")
+    bedrooms = row.get("bedrooms")
+    bathrooms = row.get("bathrooms")
+    floor = row.get("floor")
+    price_per_m2 = row.get("price_per_m2")
+
+    minimum, maximum = _price_range_for_listing_type(listing_type)
+    if price is None or price < minimum or price > maximum:
+        return "invalid_price"
+    if surface is not None and not (SURFACE_MIN <= surface <= SURFACE_MAX):
+        return "outlier_surface"
+    if bedrooms is not None and not (BEDROOMS_MIN <= bedrooms <= BEDROOMS_MAX):
+        return "outlier_bedrooms"
+    if bathrooms is not None and not (BATHROOMS_MIN <= bathrooms <= BATHROOMS_MAX):
+        return "outlier_bathrooms"
+    if floor is not None and not (FLOOR_MIN <= floor <= FLOOR_MAX):
+        return "outlier_floor"
+    if listing_type == "sale" and surface is not None and price_per_m2 is None:
+        return "outlier_price_per_m2"
+    if property_type in {"villa", "house", "riad"} and surface and surface >= 250 and bedrooms == 0:
+        return "contradictory_rooms"
+    if property_type in {"villa", "house", "riad"} and bathrooms is not None and bedrooms is not None:
+        if bathrooms > bedrooms + 4:
+            return "contradictory_rooms"
+    return None
 
 
 def _clean_raw_row_with_reason(
@@ -693,18 +958,33 @@ def _clean_raw_row_with_reason(
         return None, "missing_listing_url"
 
     title_raw = _source_value(raw, "listing_title_raw", "listing_title")
+    description_raw = _source_value(raw, "description_raw")
+    attributes_raw = _source_value(raw, "attributes_raw")
     price_raw = _source_value(raw, "price_raw", "price")
     surface_raw = _source_value(raw, "surface_raw", "surface_m2")
     bedrooms_raw = _source_value(raw, "bedrooms_raw", "bedrooms")
     bathrooms_raw = _source_value(raw, "bathrooms_raw", "bathrooms")
     floor_raw = _source_value(raw, "floor_raw", "floor")
     construction_year_raw = _source_value(raw, "construction_year_raw", "construction_year")
+    combined_text = _combined_text(raw)
 
     listing_title_clean = clean_listing_title(title_raw, listing_url)
     if not listing_title_clean:
         return None, "missing_listing_title_clean"
 
-    price = parse_price(price_raw, title_raw)
+    property_type = standardize_property_type(
+        raw.get("property_type_raw"),
+        listing_url,
+        title_raw,
+        description_raw,
+        attributes_raw,
+    )
+    if not property_type:
+        return None, "missing_property_type"
+
+    provisional_price = parse_decimal(price_raw) or parse_decimal(combined_text)
+    listing_type = detect_listing_type(raw.get("listing_type_raw"), combined_text, price=provisional_price)
+    price = parse_price(price_raw, combined_text, listing_type=listing_type)
     if price is None:
         return None, "invalid_price"
 
@@ -723,23 +1003,53 @@ def _clean_raw_row_with_reason(
         return None, "missing_batch_id"
 
     year_limit = current_year or datetime.now(UTC).year
-    surface_m2 = parse_surface(title_raw, surface_raw)
-    bedrooms = parse_bedrooms(title_raw, bedrooms_raw)
-    bathrooms = parse_bathrooms(title_raw, bathrooms_raw)
-    floor = parse_floor_from_values(title_raw, floor_raw)
+    surface_m2 = parse_surface(title_raw, description_raw, attributes_raw, surface_raw, property_type=property_type)
+    bedrooms = parse_bedrooms(bedrooms_raw, title_raw, description_raw, attributes_raw)
+    bathrooms = parse_bathrooms(bathrooms_raw, title_raw, description_raw, attributes_raw)
+    floor = parse_floor_from_values(floor_raw, title_raw, description_raw, attributes_raw)
+    if property_type == "land":
+        bedrooms = 0
+        bathrooms = 0
+        floor = 0
+    elif property_type == "studio" and bedrooms is None:
+        bedrooms = 0
     construction_year = parse_construction_year(
         construction_year_raw,
         title_raw,
+        description_raw,
+        attributes_raw,
         current_year=year_limit,
     )
     property_age = year_limit - construction_year if construction_year is not None else None
-    price_per_m2 = _safe_price_per_m2(price, surface_m2)
+    price_per_m2 = _safe_price_per_m2(price, surface_m2, property_type)
+    rooms_total = _rooms_total(property_type, bedrooms, bathrooms)
+    price_per_room = _safe_decimal_divide(price, rooms_total)
+    room_density = _safe_decimal_divide(Decimal(rooms_total) if rooms_total is not None else None, surface_m2, FOUR_PLACES)
+    surface_x_rooms = (
+        (surface_m2 * Decimal(rooms_total)).quantize(TWO_PLACES)
+        if surface_m2 is not None and rooms_total is not None
+        else None
+    )
+    bathrooms_per_bedroom = (
+        _safe_decimal_divide(Decimal(bathrooms), bedrooms, FOUR_PLACES)
+        if bathrooms is not None and bedrooms and bedrooms > 0
+        else None
+    )
+    luxury_flag = 1 if LUXURY_RE.search(combined_text) or price >= Decimal("5000000") else 0
+    coastal_city = 1 if city in COASTAL_CITIES else 0
+    latitude = parse_coordinate(raw.get("latitude_raw"), Decimal("-90"), Decimal("90"))
+    longitude = parse_coordinate(raw.get("longitude_raw"), Decimal("-180"), Decimal("180"))
 
     cleaned = {
         "listing_title_clean": listing_title_clean,
+        "description_clean": clean_text(description_raw),
         "price": price,
         "city": city,
         "district": district,
+        "property_type": property_type,
+        "listing_type": listing_type,
+        "latitude": latitude,
+        "longitude": longitude,
         "surface_m2": surface_m2,
         "bedrooms": bedrooms,
         "bathrooms": bathrooms,
@@ -747,10 +1057,25 @@ def _clean_raw_row_with_reason(
         "construction_year": construction_year,
         "property_age": property_age,
         "price_per_m2": price_per_m2,
+        "rooms_total": rooms_total,
+        "price_per_room": price_per_room,
+        "room_density": room_density,
+        "luxury_flag": luxury_flag,
+        "coastal_city": coastal_city,
+        "property_age_bucket": _property_age_bucket(property_age),
+        "surface_x_rooms": surface_x_rooms,
+        "bathrooms_per_bedroom": bathrooms_per_bedroom,
+        "extraction_score": _extraction_score(raw),
         "listing_url": listing_url,
         "scraped_at": scraped_at,
         "batch_id": batch_id,
     }
+    cleaned["feature_completeness_score"] = _feature_completeness_score(cleaned)
+
+    reason = _invalid_feature_reason(cleaned)
+    if reason:
+        return None, reason
+
     safe = sanitize_clean_listing_record(cleaned)
     assert_compliant_record(safe, CLEAN_ALLOWED_FIELDS)
     cleaned.update(safe)
@@ -808,8 +1133,8 @@ def build_clean_column_profile(rows: list[dict[str, Any]]) -> CleanColumnProfile
         missing_percentage_by_column[column] = missing_percent
         optional_completeness_percent[column] = round(100 - missing_percent, 2)
     return CleanColumnProfile(
-        columns_kept=list(REQUIRED_CLEAN_COLUMNS),
-        columns_removed=list(INTERNAL_OPTIONAL_COLUMNS),
+        columns_kept=list(CLEAN_CORE_CSV_COLUMNS),
+        columns_removed=[column for column in CLEAN_FEATURE_CSV_COLUMNS if column != "listing_url"],
         missing_percentage_by_column=missing_percentage_by_column,
         required_null_counts=required_null_counts,
         optional_completeness_percent=optional_completeness_percent,
@@ -817,41 +1142,29 @@ def build_clean_column_profile(rows: list[dict[str, Any]]) -> CleanColumnProfile
 
 
 def _available_feature_columns(rows: list[dict[str, Any]]) -> list[str]:
-    return list(OPTIONAL_FEATURE_COLUMNS)
+    return [column for column in CLEAN_FEATURE_CSV_COLUMNS if column != "listing_url"]
 
 
 def _build_core_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [{column: row.get(column) for column in REQUIRED_CLEAN_COLUMNS} for row in rows]
+    return [{column: row.get(column) for column in CLEAN_CORE_CSV_COLUMNS} for row in rows]
 
 
 def _build_feature_rows(
     rows: list[dict[str, Any]],
     feature_columns: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    columns = feature_columns or OPTIONAL_FEATURE_COLUMNS
-    feature_rows: list[dict[str, Any]] = []
-
-    for row in rows:
-        feature_row = {
-            "listing_url": row.get("listing_url"),
-            **{column: row.get(column) for column in columns},
-        }
-
-        feature_row = _validate_feature_row(feature_row)
-
-        # Keep only rows with valid surface.
-        # This makes the features file cleaner and better for BI/ML.
-        if feature_row.get("surface_m2") is not None:
-            feature_rows.append(feature_row)
-
-    return feature_rows
+    columns = feature_columns or _available_feature_columns(rows)
+    return [
+        {"listing_url": row.get("listing_url"), **{column: row.get(column) for column in columns}}
+        for row in rows
+    ]
 
 
 def _format_csv_value(value: Any) -> Any:
     if value is None:
         return ""
     if isinstance(value, Decimal):
-        return f"{value.quantize(TWO_PLACES, rounding=ROUND_HALF_UP):f}"
+        return f"{value:f}"
     return value
 
 
@@ -880,6 +1193,16 @@ def _top_values(rows: list[dict[str, Any]], column: str, limit: int = 10) -> lis
     return [{"value": value, "count": count} for value, count in counts.most_common(limit)]
 
 
+def _missing_percent(rows: list[dict[str, Any]], columns: list[str]) -> dict[str, float]:
+    row_count = len(rows)
+    return {
+        column: 0.0
+        if row_count == 0
+        else round(sum(1 for row in rows if row.get(column) in {None, ""}) / row_count * 100, 2)
+        for column in columns
+    }
+
+
 def _quality_report(
     rows_raw: int,
     rows: list[dict[str, Any]],
@@ -891,10 +1214,20 @@ def _quality_report(
     profile = build_clean_column_profile(rows)
     core_rows = _build_core_rows(rows)
     feature_rows = _build_feature_rows(rows)
-    feature_missing = {
-        column: sum(1 for row in feature_rows if row.get(column) in {None, ""})
-        for column in ["listing_url", *OPTIONAL_FEATURE_COLUMNS]
-    }
+    ml_ready_rows = [
+        row
+        for row in rows
+        if row.get("listing_type") == "sale"
+        and row.get("surface_m2") is not None
+        and row.get("price_per_m2") is not None
+        and row.get("feature_completeness_score") is not None
+        and row.get("feature_completeness_score") >= Decimal("0.70")
+    ]
+    outliers_removed = sum(
+        count
+        for reason, count in invalid_reasons.items()
+        if reason.startswith("outlier_") or reason.startswith("contradictory_")
+    )
     report: dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "batch_id": batch_id,
@@ -908,6 +1241,9 @@ def _quality_report(
         "clean_rows": len(rows),
         "core_row_count": len(core_rows),
         "features_row_count": len(feature_rows),
+        "ml_candidate_sale_rows": len(ml_ready_rows),
+        "rent_rows_excluded_from_ml": sum(1 for row in rows if row.get("listing_type") == "rent"),
+        "outliers_removed": outliers_removed,
         "removed_missing_required": sum(
             count for reason, count in invalid_reasons.items() if reason.startswith("missing_")
         ),
@@ -915,22 +1251,53 @@ def _quality_report(
         "required_null_counts": profile.required_null_counts,
         "missing_values_core": {
             column: sum(1 for row in core_rows if row.get(column) in {None, ""})
-            for column in REQUIRED_CLEAN_COLUMNS
+            for column in CLEAN_CORE_CSV_COLUMNS
         },
-        "missing_values_features": feature_missing,
+        "missing_values_features": {
+            column: sum(1 for row in feature_rows if row.get(column) in {None, ""})
+            for column in CLEAN_FEATURE_CSV_COLUMNS
+        },
+        "missing_values_percent": _missing_percent(rows, CLEAN_CORE_CSV_COLUMNS + OPTIONAL_FEATURE_COLUMNS),
         "columns_kept_in_core": profile.columns_kept,
         "columns_removed_from_core": profile.columns_removed,
         "optional_completeness_percent": profile.optional_completeness_percent,
+        "extraction_success_rate": {
+            "price": round(100 - (invalid_reasons.get("invalid_price", 0) / max(rows_raw, 1) * 100), 2),
+            "property_type": round(100 - (invalid_reasons.get("missing_property_type", 0) / max(rows_raw, 1) * 100), 2),
+            "location": round(
+                100
+                - (
+                    (invalid_reasons.get("missing_city", 0) + invalid_reasons.get("missing_district", 0))
+                    / max(rows_raw, 1)
+                    * 100
+                ),
+                2,
+            ),
+        },
+        "feature_completeness": {
+            "avg_score": None
+            if not rows
+            else float(
+                (
+                    sum(row["feature_completeness_score"] for row in rows)
+                    / Decimal(len(rows))
+                ).quantize(FOUR_PLACES)
+            ),
+            "ml_ready_missing_percent": _missing_percent(ml_ready_rows, CLEAN_CORE_CSV_COLUMNS + OPTIONAL_FEATURE_COLUMNS),
+        },
         "validation_ranges": {
-            "price_mad": [float(PRICE_MIN), float(PRICE_MAX)],
+            "sale_price_mad": [float(SALE_PRICE_MIN), float(SALE_PRICE_MAX)],
+            "rent_price_mad": [float(RENT_PRICE_MIN), float(RENT_PRICE_MAX)],
             "surface_m2": [float(SURFACE_MIN), float(SURFACE_MAX)],
             "bedrooms": [BEDROOMS_MIN, BEDROOMS_MAX],
             "bathrooms": [BATHROOMS_MIN, BATHROOMS_MAX],
             "floor": [FLOOR_MIN, FLOOR_MAX],
             "price_per_m2": [float(PRICE_PER_M2_MIN), float(PRICE_PER_M2_MAX)],
         },
+        "top_property_types": _top_values(rows, "property_type"),
         "top_cities": _top_values(rows, "city"),
         "top_districts": _top_values(rows, "district"),
+        "sale_vs_rent_distribution": _top_values(rows, "listing_type"),
         "quality_warnings": [],
     }
     for reason, count in invalid_reasons.items():
@@ -949,17 +1316,17 @@ def _quality_report(
     report["avg_price_per_m2"] = report.get("price_per_m2_avg")
 
     if rows:
-        if report["optional_completeness_percent"]["surface_m2"] < 60:
+        if profile.optional_completeness_percent.get("surface_m2", 0) < 70:
             report["quality_warnings"].append(
-                "Surface completeness below 60%. Review scraper feature selectors."
+                "Surface completeness below 70%. Detail page extraction should be reviewed."
             )
-        if report["optional_completeness_percent"]["bedrooms"] < 50:
+        if profile.optional_completeness_percent.get("bedrooms", 0) < 60:
             report["quality_warnings"].append(
-                "Bedrooms completeness below 50%. Detail pages may be needed for this field."
+                "Bedrooms completeness below 60%. Residential NLP patterns may need tuning."
             )
-        if invalid_reasons.get("invalid_price", 0) / max(rows_raw, 1) > 0.25:
+        if len(ml_ready_rows) / max(len(rows), 1) < 0.50:
             report["quality_warnings"].append(
-                "High invalid price rate. Rental listings or weak price extraction may be present."
+                "Less than half of clean rows are ML candidates after sale and density filters."
             )
     return report
 
@@ -989,6 +1356,8 @@ def clean_raw_csv_to_clean_csv(raw_file: Path, batch_id: str | None = None) -> C
         if missing_columns:
             raise ValueError(f"Raw CSV missing columns: {missing_columns}")
         raw_rows = [dict(row) for row in reader]
+        for row in raw_rows:
+            row["batch_id"] = batch_id
 
     clean_rows, duplicates_removed, invalid_reasons = _clean_rows(raw_rows)
     feature_columns = _available_feature_columns(clean_rows)
@@ -999,7 +1368,7 @@ def clean_raw_csv_to_clean_csv(raw_file: Path, batch_id: str | None = None) -> C
     features_file = settings.clean_dir / f"avito_clean_features_{batch_id}.csv"
     quality_report = settings.clean_dir / f"quality_report_{batch_id}.json"
 
-    _write_csv(clean_file, core_rows, REQUIRED_CLEAN_COLUMNS)
+    _write_csv(clean_file, core_rows, CLEAN_CORE_CSV_COLUMNS)
     _write_csv(features_file, feature_rows, ["listing_url", *feature_columns])
 
     report = _quality_report(
@@ -1060,18 +1429,46 @@ def _read_clean_csv(clean_file: Path, batch_id: str) -> CsvReadResult:
     invalid_reasons: Counter[str] = Counter()
     with clean_file.open("r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
-        missing_columns = sorted(set(REQUIRED_CLEAN_COLUMNS) - set(reader.fieldnames or []))
+        legacy_required_columns = {
+            "listing_title_clean",
+            "price",
+            "city",
+            "district",
+            "listing_url",
+            "scraped_at",
+            "batch_id",
+        }
+        missing_columns = sorted(legacy_required_columns - set(reader.fieldnames or []))
         if missing_columns:
             raise ValueError(f"Clean CSV missing columns: {missing_columns}")
         for row in reader:
+            inferred_property_type = standardize_property_type(
+                row.get("property_type"),
+                row.get("listing_title_clean"),
+                row.get("description_clean"),
+                row.get("listing_url"),
+            )
+            inferred_listing_type = detect_listing_type(
+                row.get("listing_type"),
+                row.get("listing_title_clean"),
+                row.get("description_clean"),
+                row.get("listing_url"),
+                price=parse_decimal(row.get("price")),
+            )
+            row_for_required = {
+                **row,
+                "property_type": row.get("property_type") or inferred_property_type,
+                "listing_type": row.get("listing_type") or inferred_listing_type,
+            }
             missing_required = [
-                column for column in REQUIRED_CLEAN_COLUMNS if clean_text(row.get(column)) is None
+                column for column in REQUIRED_CLEAN_COLUMNS if clean_text(row_for_required.get(column)) is None
             ]
             if missing_required:
                 invalid_reasons[f"missing_{missing_required[0]}"] += 1
                 continue
-            price = parse_decimal(row.get("price"))
-            if price is None or not (PRICE_MIN <= price <= PRICE_MAX):
+            listing_type = inferred_listing_type
+            price = parse_price(row.get("price"), listing_type=listing_type)
+            if price is None:
                 invalid_reasons["invalid_price"] += 1
                 continue
             listing_url = normalize_listing_url(row.get("listing_url"))
@@ -1080,25 +1477,21 @@ def _read_clean_csv(clean_file: Path, batch_id: str) -> CsvReadResult:
                 continue
             record = {
                 "listing_title_clean": clean_text(row.get("listing_title_clean")),
+                "description_clean": clean_text(row.get("description_clean")),
                 "price": price,
                 "city": standardize_city(row.get("city")),
                 "district": standardize_district(row.get("district")),
+                "property_type": inferred_property_type,
+                "listing_type": listing_type,
+                "latitude": parse_coordinate(row.get("latitude"), Decimal("-90"), Decimal("90")),
+                "longitude": parse_coordinate(row.get("longitude"), Decimal("-180"), Decimal("180")),
                 "listing_url": listing_url,
                 "scraped_at": _parse_scraped_at(row.get("scraped_at")),
                 "batch_id": clean_text(row.get("batch_id")) or batch_id,
-                "surface_m2": None,
-                "bedrooms": None,
-                "bathrooms": None,
-                "floor": None,
-                "construction_year": None,
-                "property_age": None,
-                "price_per_m2": None,
             }
-            if not record["city"]:
-                invalid_reasons["missing_city"] += 1
-                continue
-            if not record["district"]:
-                invalid_reasons["missing_district"] += 1
+            if any(record[column] in {None, ""} for column in REQUIRED_CLEAN_COLUMNS):
+                missing = next(column for column in REQUIRED_CLEAN_COLUMNS if record[column] in {None, ""})
+                invalid_reasons[f"missing_{missing}"] += 1
                 continue
             safe = sanitize_clean_listing_record(record)
             assert_compliant_record(safe, CLEAN_ALLOWED_FIELDS)
@@ -1112,9 +1505,8 @@ def _read_feature_csv(features_file: Path, batch_id: str) -> CsvReadResult:
     invalid_reasons: Counter[str] = Counter()
     with features_file.open("r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
-        missing_columns = sorted(
-            set(["listing_url", *OPTIONAL_FEATURE_COLUMNS]) - set(reader.fieldnames or [])
-        )
+        legacy_required_columns = {"listing_url", "surface_m2", "bedrooms", "bathrooms", "floor", "price_per_m2"}
+        missing_columns = sorted(legacy_required_columns - set(reader.fieldnames or []))
         if missing_columns:
             raise ValueError(f"Features CSV missing columns: {missing_columns}")
         for row in reader:
@@ -1122,26 +1514,41 @@ def _read_feature_csv(features_file: Path, batch_id: str) -> CsvReadResult:
             if not listing_url:
                 invalid_reasons["invalid_listing_url"] += 1
                 continue
-            surface_m2 = parse_surface(row.get("surface_m2"))
-            bedrooms = parse_int_feature(row.get("bedrooms"), BEDROOMS_MIN, BEDROOMS_MAX)
-            bathrooms = parse_int_feature(row.get("bathrooms"), BATHROOMS_MIN, BATHROOMS_MAX)
-            floor = parse_int_feature(row.get("floor"), FLOOR_MIN, FLOOR_MAX)
-            price_per_m2 = _first_valid_decimal(
-                (row.get("price_per_m2"),),
-                parse_decimal,
-                PRICE_PER_M2_MIN,
-                PRICE_PER_M2_MAX,
-            )
             record = {
                 "listing_url": listing_url,
-                "surface_m2": surface_m2,
-                "bedrooms": bedrooms,
-                "bathrooms": bathrooms,
-                "floor": floor,
-                "price_per_m2": price_per_m2,
-                "batch_id": batch_id,
+                "surface_m2": _first_valid_decimal((row.get("surface_m2"),), parse_decimal, SURFACE_MIN, SURFACE_MAX),
+                "bedrooms": parse_int_feature(row.get("bedrooms"), BEDROOMS_MIN, BEDROOMS_MAX),
+                "bathrooms": parse_int_feature(row.get("bathrooms"), BATHROOMS_MIN, BATHROOMS_MAX),
+                "floor": parse_int_feature(row.get("floor"), FLOOR_MIN, FLOOR_MAX),
+                "construction_year": parse_int_feature(row.get("construction_year"), 1800, 2100),
+                "property_age": parse_int_feature(row.get("property_age"), 0, 200),
+                "price_per_m2": _first_valid_decimal(
+                    (row.get("price_per_m2"),), parse_decimal, PRICE_PER_M2_MIN, PRICE_PER_M2_MAX
+                ),
+                "rooms_total": parse_int_feature(row.get("rooms_total"), 0, 40),
+                "price_per_room": parse_decimal(row.get("price_per_room")),
+                "room_density": parse_plain_decimal(row.get("room_density"), Decimal("0")),
+                "luxury_flag": parse_int_feature(row.get("luxury_flag"), 0, 1),
+                "coastal_city": parse_int_feature(row.get("coastal_city"), 0, 1),
+                "property_age_bucket": clean_text(row.get("property_age_bucket")),
+                "surface_x_rooms": parse_plain_decimal(row.get("surface_x_rooms"), Decimal("0")),
+                "bathrooms_per_bedroom": parse_plain_decimal(
+                    row.get("bathrooms_per_bedroom"), Decimal("0")
+                ),
+                "extraction_score": parse_plain_decimal(
+                    row.get("extraction_score"), Decimal("0"), Decimal("1")
+                ),
+                "feature_completeness_score": parse_plain_decimal(
+                    row.get("feature_completeness_score"), Decimal("0"), Decimal("1")
+                ),
+                "batch_id": clean_text(row.get("batch_id")) or batch_id,
             }
-            if all(record[column] is None for column in OPTIONAL_FEATURE_COLUMNS):
+            analytical_fields = [
+                field
+                for field in OPTIONAL_FEATURE_COLUMNS
+                if field not in {"extraction_score", "feature_completeness_score"}
+            ]
+            if all(record.get(field) in {None, ""} for field in analytical_fields):
                 invalid_reasons["all_features_missing"] += 1
                 continue
             records.append(record)
@@ -1160,10 +1567,9 @@ def load_clean_csv_to_clean_table(
         else CsvReadResult([], 0, {})
     )
     clean_records = clean_result.records
+    clean_urls = {clean_record["listing_url"] for clean_record in clean_records}
     feature_records = [
-        record
-        for record in feature_result.records
-        if record["listing_url"] in {clean_record["listing_url"] for clean_record in clean_records}
+        record for record in feature_result.records if record["listing_url"] in clean_urls
     ]
 
     with get_connection() as connection:
@@ -1180,17 +1586,25 @@ def load_clean_csv_to_clean_table(
                 cursor.executemany(
                     """
                     INSERT INTO clean.clean_listings (
-                        listing_title_clean, price, city, district, listing_url, scraped_at, batch_id
+                        listing_title_clean, description_clean, price, city, district,
+                        property_type, listing_type, latitude, longitude,
+                        listing_url, scraped_at, batch_id
                     )
                     VALUES (
-                        %(listing_title_clean)s, %(price)s, %(city)s, %(district)s,
-                        %(listing_url)s, %(scraped_at)s, %(batch_id)s
+                        %(listing_title_clean)s, %(description_clean)s, %(price)s,
+                        %(city)s, %(district)s, %(property_type)s, %(listing_type)s,
+                        %(latitude)s, %(longitude)s, %(listing_url)s, %(scraped_at)s, %(batch_id)s
                     )
                     ON CONFLICT (listing_url) DO UPDATE SET
                         listing_title_clean = EXCLUDED.listing_title_clean,
+                        description_clean = EXCLUDED.description_clean,
                         price = EXCLUDED.price,
                         city = EXCLUDED.city,
                         district = EXCLUDED.district,
+                        property_type = EXCLUDED.property_type,
+                        listing_type = EXCLUDED.listing_type,
+                        latitude = EXCLUDED.latitude,
+                        longitude = EXCLUDED.longitude,
                         scraped_at = EXCLUDED.scraped_at,
                         batch_id = EXCLUDED.batch_id;
                     """,
@@ -1200,18 +1614,37 @@ def load_clean_csv_to_clean_table(
                 cursor.execute(
                     """
                     INSERT INTO clean.clean_listing_features (
-                        listing_url, surface_m2, bedrooms, bathrooms, floor, price_per_m2, batch_id
+                        listing_url, surface_m2, bedrooms, bathrooms, floor,
+                        construction_year, property_age, price_per_m2, rooms_total,
+                        price_per_room, room_density, luxury_flag, coastal_city,
+                        property_age_bucket, surface_x_rooms, bathrooms_per_bedroom,
+                        extraction_score, feature_completeness_score, batch_id
                     )
                     VALUES (
-                        %(listing_url)s, %(surface_m2)s, %(bedrooms)s, %(bathrooms)s,
-                        %(floor)s, %(price_per_m2)s, %(batch_id)s
+                        %(listing_url)s, %(surface_m2)s, %(bedrooms)s, %(bathrooms)s, %(floor)s,
+                        %(construction_year)s, %(property_age)s, %(price_per_m2)s, %(rooms_total)s,
+                        %(price_per_room)s, %(room_density)s, %(luxury_flag)s, %(coastal_city)s,
+                        %(property_age_bucket)s, %(surface_x_rooms)s, %(bathrooms_per_bedroom)s,
+                        %(extraction_score)s, %(feature_completeness_score)s, %(batch_id)s
                     )
                     ON CONFLICT (listing_url) DO UPDATE SET
                         surface_m2 = EXCLUDED.surface_m2,
                         bedrooms = EXCLUDED.bedrooms,
                         bathrooms = EXCLUDED.bathrooms,
                         floor = EXCLUDED.floor,
+                        construction_year = EXCLUDED.construction_year,
+                        property_age = EXCLUDED.property_age,
                         price_per_m2 = EXCLUDED.price_per_m2,
+                        rooms_total = EXCLUDED.rooms_total,
+                        price_per_room = EXCLUDED.price_per_room,
+                        room_density = EXCLUDED.room_density,
+                        luxury_flag = EXCLUDED.luxury_flag,
+                        coastal_city = EXCLUDED.coastal_city,
+                        property_age_bucket = EXCLUDED.property_age_bucket,
+                        surface_x_rooms = EXCLUDED.surface_x_rooms,
+                        bathrooms_per_bedroom = EXCLUDED.bathrooms_per_bedroom,
+                        extraction_score = EXCLUDED.extraction_score,
+                        feature_completeness_score = EXCLUDED.feature_completeness_score,
                         batch_id = EXCLUDED.batch_id;
                     """,
                     record,
@@ -1258,9 +1691,14 @@ def main() -> None:
             "raw_rows",
             "after_dedup_rows",
             "clean_rows",
+            "ml_candidate_sale_rows",
+            "rent_rows_excluded_from_ml",
             "removed_duplicates",
+            "outliers_removed",
             "invalid_reasons_count",
             "optional_completeness_percent",
+            "sale_vs_rent_distribution",
+            "top_property_types",
             "quality_warnings",
         ]
         print(json.dumps({key: report.get(key) for key in summary_keys}, indent=2, ensure_ascii=False))

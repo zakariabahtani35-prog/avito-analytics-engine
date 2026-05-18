@@ -34,9 +34,16 @@ def _read_raw_csv(path: Path, batch_id: str) -> list[dict[str, Any]]:
             raw_record["listing_title_raw"] = (
                 raw_record.get("listing_title_raw") or row.get("listing_title") or None
             )
-            raw_record["batch_id"] = raw_record.get("batch_id") or batch_id
+            raw_record["batch_id"] = batch_id
             raw_record["source"] = raw_record.get("source") or "avito.ma"
             record = sanitize_raw_listing_record(raw_record)
+            record["detail_scraped"] = str(record.get("detail_scraped") or "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "y",
+                "on",
+            }
             assert_compliant_record(record, RAW_ALLOWED_FIELDS)
             records.append(record)
             if not record.get("listing_url"):

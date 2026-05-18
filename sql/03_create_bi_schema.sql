@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS bi_schema.fact_listing (
     time_id INTEGER NOT NULL REFERENCES bi_schema.dim_time(time_id),
     location_id INTEGER NOT NULL REFERENCES bi_schema.dim_location(location_id),
     price NUMERIC NOT NULL,
+    property_type TEXT,
+    listing_type TEXT,
+    surface_m2 NUMERIC,
+    price_per_m2 NUMERIC,
     listing_url TEXT NOT NULL UNIQUE,
     batch_id TEXT
 );
@@ -34,12 +38,15 @@ ALTER TABLE bi_schema.fact_listing
     ADD COLUMN IF NOT EXISTS time_id INTEGER,
     ADD COLUMN IF NOT EXISTS location_id INTEGER,
     ADD COLUMN IF NOT EXISTS price NUMERIC,
+    ADD COLUMN IF NOT EXISTS property_type TEXT,
+    ADD COLUMN IF NOT EXISTS listing_type TEXT,
+    ADD COLUMN IF NOT EXISTS surface_m2 NUMERIC,
+    ADD COLUMN IF NOT EXISTS price_per_m2 NUMERIC,
     ADD COLUMN IF NOT EXISTS listing_url TEXT,
     ADD COLUMN IF NOT EXISTS batch_id TEXT;
 
 ALTER TABLE bi_schema.fact_listing
-    DROP COLUMN IF EXISTS property_features_id,
-    DROP COLUMN IF EXISTS price_per_m2;
+    DROP COLUMN IF EXISTS property_features_id;
 
 DROP TABLE IF EXISTS bi_schema.dim_property_features;
 
@@ -56,3 +63,9 @@ DROP INDEX IF EXISTS idx_fact_listing_property_features_id;
 
 CREATE INDEX IF NOT EXISTS idx_fact_listing_batch_id
     ON bi_schema.fact_listing (batch_id);
+
+CREATE INDEX IF NOT EXISTS idx_fact_listing_listing_type
+    ON bi_schema.fact_listing (listing_type);
+
+CREATE INDEX IF NOT EXISTS idx_fact_listing_property_type
+    ON bi_schema.fact_listing (property_type);
